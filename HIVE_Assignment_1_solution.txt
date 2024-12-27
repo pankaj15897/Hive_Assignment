@@ -1,0 +1,464 @@
+Problem 1: Data Loading
+1)Load the data into a Hive table. Create an external table with the
+ given schema and load the data into the table from a text file or HDFS
+ path.
+
+load data file at LOCATION '/tmp/input_data'.
+
+CREATE EXTERNAL TABLE car_insurance_data (
+ Id INT,
+ Age INT,
+ Job STRING,
+ Marital STRING,
+ Education STRING,
+ Default INT,
+ Balance INT,
+ HHInsurance INT,
+ CarLoan INT,
+ Communication STRING,
+ LastContactDay INT,
+ LastContactMonth INT,
+ NoOfContacts INT,
+ DaysPassed INT,
+ PrevAttempts INT,
+ Outcome STRING,
+ CallStart STRING,
+ CallEnd STRING,
+ CarInsurance INT)
+ ROW FORMAT DELIMITED
+ FIELDS TERMINATED BY ','
+ STORED AS TEXTFILE
+ LOCATION '/tmp/input_data';
+
+Problem 2: Data Exploration
+1)How many records are there in the dataset?
+select count(*) from car_insurance_data;
+
+2)How many unique job categories are there?
+select count(distinct(Job)) as distinct_job from car_insurance_data;
+
+3)What is the age distribution of customers in the dataset? Provide
+ a breakdown by age group: 18-30, 31-45, 46-60, 61+.
+SELECT CASE
+ WHEN Age BETWEEN 18 AND 30 THEN'18-30'
+ WHEN Age BETWEEN 31 AND 45 THEN'31-45'
+ WHEN Age BETWEEN 46 AND 60 THEN'46-60'
+ ELSE '61+'
+ END AS age_group,
+ COUNT(*) AS count
+ FROM car_insurance_data
+ GROUP BY CASE
+ WHEN Age BETWEEN 18 AND 30 THEN'18-30'
+ WHEN Age BETWEEN 31 AND 45 THEN'31-45'
+ WHEN Age BETWEEN 46 AND 60 THEN'46-60'
+ ELSE '61+'
+ END;
+
+4) Count the number of records that have missing values in any
+ field.
+SELECT COUNT(*)
+ FROM car_insurance_data
+ WHERE Id IS NULL
+ OR Age IS NULL
+ OR Job IS NULL
+ OR Marital IS NULL
+ OR Education IS NULL
+ OR Default IS NULL
+ OR Balance IS NULL
+ OR HHInsurance IS NULL
+ OR CarLoan IS NULL
+ OR Communication IS NULL
+ OR LastContactDay IS NULL
+ OR LastContactMonth IS NULL
+ OR NoOfContacts IS NULL
+ OR DaysPassed IS NULL
+ OR PrevAttempts IS NULL
+ OR Outcome IS NULL
+ OR CallStart IS NULL
+ OR CallEnd IS NULL
+ OR CarInsurance IS NULL;
+
+5)Determine the number of unique 'Outcome' values and their respective counts.
+select outcome, count(*) as outcome_count from car_insurance_data group by outcome;
+
+6)Find the number of customers who have both a car loan and home insurance.
+select count(*) from car_insurance_data where CarLoan = 1 and HHInsurance = 1;
+
+Problem 3: Aggregations
+1)What is the average, minimum, and maximum balance for each job category?
+select Job, avg(balance) as avg, max(balance) as maximum, min(balance) as minimum from car_insurance_data group by job;
+
+2)Find the total number of customers with and without car insurance.
+select CarInsurance, count(*) from car_insurance_data;
+SELECT CarInsurance, COUNT(*) FROM car_insurance_data;
+
+3)Count the number of customers for each communication type.
+SELECT Communication, COUNT(*) FROM car_insurance_data GROUP BY Communication;
+
+4)Calculate the sum of 'Balance' for each 'Communication' type.
+SELECT Communication, SUM(balace) FROM car_insurance_data GROUP BY Communication;
+
+5)Count the number of 'PrevAttempts' for each 'Outcome' type.
+select outcome, sum(PrevAttempts) from car_insurance_data group by outcome;
+
+6)Calculate the average 'NoOfContacts' for people with and without 'CarInsurance'
+select CarInsurance, avg(NoOfContacts) from car_insurance_data group by CarInsurance;
+
+Problem 4: Partitioning and Bucketing
+1)Create a partitioned table on 'Education' and 'Marital' status. Load
+ data from the original table to this new partitioned table.
+
+CREATE TABLE car_insurance_data_partitioned (
+ Id INT,
+ Age INT,
+ Job STRING,
+ Default INT,
+ Balance INT,
+ HHInsurance INT,
+ CarLoan INT,
+ Communication STRING,
+ LastContactDay INT,
+ LastContactMonth INT,
+ NoOfContacts INT,
+ DaysPassed INT,
+ PrevAttempts INT,
+ Outcome STRING,
+ CallStart STRING,
+ CallEnd STRING,
+ CarInsurance INT)
+ PARTITIONED BY (Education STRING, Marital STRING)
+ ROW FORMAT DELIMITED
+ FIELDS TERMINATED BY ','
+ STORED AS TEXTFILE;
+
+INSERT OVERWRITE TABLE 
+car_insurance_data_partitioned 
+PARTITION (Education, Marital)
+SELECT 
+    Id, Age, Job, Default, Balance, HHInsurance, 
+    CarLoan, Communication, LastContactDay, 
+    LastContactMonth, NoOfContacts, DaysPassed, 
+    PrevAttempts, Outcome, CallStart, CallEnd, 
+    CarInsurance, Education, Marital
+FROM car_insurance_data;
+
+2)Create a bucketed table on 'Age', bucketed into 4 groups (as per
+ the age groups mentioned above). Load data from the original
+ table into this bucketed table.
+
+CREATE TABLE car_insurance_data_bucketed (
+    Id INT,
+    Age INT,
+    Job STRING,
+    Marital STRING,
+    Education STRING,
+    Default INT,
+    Balance INT,
+    HHInsurance INT,
+    CarLoan INT,
+    Communication STRING,
+    LastContactDay INT,
+    LastContactMonth STRING,
+    NoOfContacts INT,
+    DaysPassed INT,
+    PrevAttempts INT,
+    Outcome STRING,
+    CallStart STRING,
+    CallEnd STRING,
+    CarInsurance INT
+)
+CLUSTERED BY (Age) INTO 4 BUCKETS
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+INSERT OVERWRITE TABLE car_insurance_data_bucketed
+SELECT * FROM car_insurance_data;
+
+3)Add an additional partition on 'Job' to the partitioned table created
+ earlier and move the data accordingly.
+
+CREATE TABLE car_insurance_data_partitioned_new (
+    Id INT,
+    Age INT,
+    Default INT,
+    Balance INT,
+    HHInsurance INT,
+    CarLoan INT,
+    Communication STRING,
+    LastContactDay INT,
+    LastContactMonth INT,
+    NoOfContacts INT,
+    DaysPassed INT,
+    PrevAttempts INT,
+    Outcome STRING,
+    CallStart STRING,
+    CallEnd STRING,
+    CarInsurance INT
+)
+PARTITIONED BY (
+    Education STRING, 
+    Marital STRING, 
+    Job STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+INSERT OVERWRITE TABLE car_insurance_data_partitioned_new
+PARTITION (Education, Marital, Job)
+SELECT 
+    Id, Age, Default, Balance, HHInsurance, CarLoan, Communication, 
+    LastContactDay, LastContactMonth, NoOfContacts, DaysPassed, 
+    PrevAttempts, Outcome, CallStart, CallEnd, CarInsurance, 
+    Education, Marital, Job
+FROM car_insurance_data_partitioned;
+
+SHOW PARTITIONS car_insurance_data_partitioned_new;
+SELECT * FROM car_insurance_data_partitioned_new LIMIT 10;
+
+4)Increase the number of buckets in the bucketed table to 10 and redistribute the data.
+
+CREATE TABLE car_insurance_data_bucketed_new (
+    Id INT,
+    Age INT,
+    Job STRING,
+    Marital STRING,
+    Education STRING,
+    Default INT,
+    Balance INT,
+    HHInsurance INT,
+    CarLoan INT,
+    Communication STRING,
+    LastContactDay INT,
+    LastContactMonth STRING,
+    NoOfContacts INT,
+    DaysPassed INT,
+    PrevAttempts INT,
+    Outcome STRING,
+    CallStart STRING,
+    CallEnd STRING,
+    CarInsurance INT
+)
+CLUSTERED BY (Age) INTO 10 BUCKETS
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+INSERT OVERWRITE TABLE car_insurance_data_bucketed_new
+SELECT * FROM car_insurance_data_bucketed;
+------------------------------------------------------------------------------------------------------
+Problem 5: Optimized Joins
+1)Join the original table with the partitioned table and find out the
+ average 'Balance' for each 'Job' and 'Education' level.
+
+SELECT o.Job, p.Education, AVG(o.Balance) as
+ average_balance
+ FROM car_insurance_data o
+ JOIN car_insurance_data_partitioned_new p 
+ ON o.Id = p.Id
+ GROUP BY o.Job, p.Education;
+
+2)Join the original table with the bucketed table and calculate the
+ total 'NoOfContacts' for each 'Age' group.
+
+SELECT o.Age, SUM(o.NoOfContacts) as total_contacts
+ FROM car_insurance_data o
+ JOIN car_insurance_data_bucketed_new b 
+ ON o.Id = b.Id
+ GROUP BY o.Age;
+
+3)Join the partitioned table and the bucketed table based on the 'Id'
+ field and find the total balance for each education level and
+ marital status for each age group.
+
+SELECT p.Age, p.Education, p.Marital,
+ SUM(b.Balance) AS total_balance
+ FROM car_insurance_data_partitioned p
+ JOIN car_insurance_data_bucketed b 
+ ON p.Id = b.Id
+ GROUP BY p.Age, p.Education, p.Marital;
+------------------------------------------------------------------------------------------------------
+Problem 6: Window Function
+1)Calculate the cumulative sum of 'NoOfContacts' for each 'Job' category, ordered by 'Age'.
+
+SELECT Age, Job, NoOfContacts, SUM(NoOfContacts) OVER (PARTITION BY Job ORDER BY Age) AS cumulative_sum FROM car_insurance_data ORDER BY Age,Job;
+
+2)Calculate the running average of 'Balance' for each 'Job' category, ordered by 'Age'.
+
+select age, job, balance, avg(balance) over (partition by job order by age) as avrage_balance from car_insurance_data ORDER BY Age,Job;
+
+3)For each 'Job' category, find the maximum 'Balance' for each 'Age' group using window functions.
+
+SELECT Age, Job, Balance
+ FROM(
+ SELECT Age, Job, Balance,
+ ROW_NUMBER() OVER(PARTITION BY
+ Job, Age ORDER BY Balance DESC) AS rn
+ FROM car_insurance_data
+ ) t
+ WHERE rn =1
+ ORDER BY Job, Age;
+
+4) Calculate the rank of 'Balance' within each 'Job' category, ordered by 'Balance' descending.
+
+SELECT Age, Job, Balance, RANK() OVER (PARTITION BY Job ORDER BY Balance DESC) AS balance_rank FROM car_insurance_data ORDER BY Job, Balance DESC;
+---------------------------------------------------------------------------------------------------------------------------------------------------
+Problem 7: Advanced Aggregations
+
+1)Find the job category with the highest number of car insurances.
+
+select job from
+(select job, count(*) as car_insurance_count from car_insurance_data where carinsurance = 1 group by job) t
+order by car_insurance_count desc limit 1;
+
+2)Which month has seen the highest number of last contacts?
+
+SELECT LastContactMonth, COUNT(*) AS contact_count FROM car_insurance_data
+ GROUP BY LastContactMonth
+ ORDER BY contact_count DESC LIMIT 1;
+
+3)Calculate the ratio of the number of customers with car insurance
+ to the number of customers without car insurance for each job category.
+
+SELECT t1.Job, t1.car_insurance_count /
+ t2.no_car_insurance_count AS
+ car_insurance_ratio
+ FROM(
+ SELECT Job, COUNT(*) AS
+ car_insurance_count
+ FROM car_insurance_data
+ WHERE CarInsurance = 1
+ GROUP BY Job
+ ) t1
+ JOIN (
+ SELECT Job, COUNT(*) AS
+ no_car_insurance_count
+ FROM car_insurance_data
+ WHERE CarInsurance = 0
+ GROUP BY Job
+ ) t2
+ ON t1.Job = t2.Job;
+
+4) Find out the 'Job' and 'Education' level combination which has the highest number of car insurances.
+
+select job, education, count(*) as car_insurance from car_insurance_data
+where carinsurance = 1
+group by job,education
+order by car_insurance desc
+limit 1;
+
+SELECT Job, Education
+ FROM (
+ SELECT Job, Education, COUNT(*)
+ AS car_insurance_count
+ FROM car_insurance_data
+ WHERE CarInsurance = 1
+ GROUP BY Job,Education
+ ) t
+ ORDER BY car_insurance_count DESC
+ LIMIT 1;
+
+5)Calculate the average 'NoOfContacts' for each 'Outcome' and 'Job' combination.
+
+select outcome, job, avg(noofcontacts) as avg_contacts from car_insurance_data
+group by outcome, job
+order by outcome, job desc;
+
+6)Determine the month with the highest total 'Balance' of
+ customers.
+
+SELECT LastContactMonth,SUM(Balance) AS total_balance FROM car_insurance_data GROUP BY LastContactMonth;
+
+----------------------------------------------------------------------------------------------------------
+Problem 8: Complex joins and aggregations
+1)For customers who have both a car loan and home insurance,find out the average 'Balance' for each 'Education' level.
+
+select education,avg(balance) as avg_balance from car_insurance_data
+where HHInsurance = 1 and carloan = 1
+group by education
+order by avg_balance desc;
+
+2)Identify the top 3 'Communication' types for customers with 'CarInsurance', and display their average 'NoOfContacts'.
+
+SELECT Communication, AVG(NoOfContacts) AS average_contacts
+FROM car_insurance_data
+WHERE CarInsurance = 1
+GROUP BY Communication
+ORDER BY average_contacts DESC
+LIMIT 3;
+
+3)For customers who have a car loan, calculate the average balance for each job category.
+
+select job, avg(balance) as avg_balance
+from car_insurance_data
+where carloan = 1
+group by job;
+
+4) Identify the top 5 job categories that have the most customers with a 'default', and show their average 'balance'.
+
+select job, avg(balance) as avg_balance
+from car_insurance_data
+where default = 1
+group by job
+order by count(*) desc
+limit 5;
+
+SELECT Job, AVG(Balance) AS average_balance
+ FROM(
+ SELECT Job, Balance
+ FROM car_insurance_data
+ WHERE Default = 1
+ ) t
+ GROUP BY Job
+ ORDER BY COUNT(*) DESC
+ LIMIT 5;
+---------------------------------------------------------------------------------------------------------------------------
+ Problem 9: Advanced Window Functions
+1)Calculate the difference in 'NoOfContacts' between each customer and the customer with the next highest number of
+ contacts in the same 'Job' category.
+
+SELECT 
+    Id,
+    Job,
+    NoOfContacts,
+    LEAD(NoOfContacts) OVER (PARTITION BY Job ORDER BY NoOfContacts DESC) AS NextHighestContacts,
+    NoOfContacts - LEAD(NoOfContacts) OVER (PARTITION BY Job ORDER BY NoOfContacts DESC) AS Difference
+FROM 
+    car_insurance_data;
+
+2)For each customer, calculate the difference between their 'balance' and the average 'balance' of their 'job' category
+
+SELECT 
+    Id, 
+    Balance, 
+    AVG(Balance) OVER (PARTITION BY Job) AS Avg_Balance,
+    Balance - AVG(Balance) OVER (PARTITION BY Job) AS Difference
+FROM 
+    car_insurance_data;
+
+3)For each 'Job' category, find the customer who had the longest call duration.
+
+SELECT Job, Id, CallDuration
+ FROM(
+ SELECT Job, Id, CallDuration,
+ ROW_NUMBER() OVER(PARTITION BY Job
+ ORDERBYCallDuration DESC) AS rn
+ FROMcar_insurance_data
+ ) t
+ WHERErn=1;
+
+4) Calculate the moving average of 'NoOfContacts' within each 'Job' category, using a window frame of the current row and the two preceding rows.
+
+SELECT 
+    Id, 
+    Job, 
+    NoOfContacts,
+    AVG(NoOfContacts) OVER (
+        PARTITION BY Job 
+        ORDER BY Id 
+        ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+    ) AS moving_average
+FROM 
+    car_insurance_data;
+-------------------------------------------------------------------------------------------------------------------------------------------------
