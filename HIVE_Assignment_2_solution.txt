@@ -1,0 +1,331 @@
+CREATE TABLE telecom_data (
+ customerID STRING,
+ gender STRING,
+ SeniorCitizen INT,
+ Partner STRING,
+ Dependents STRING,
+ tenure INT,
+ PhoneService STRING,
+ MultipleLines STRING,
+ InternetService STRING,
+ OnlineSecurity STRING,
+ OnlineBackup STRING,
+ DeviceProtection STRING,
+ TechSupport STRING,
+ StreamingTV STRING,
+ StreamingMovies STRING,
+ Contract STRING,
+ PaperlessBilling STRING,
+ PaymentMethod STRING,
+ MonthlyCharges FLOAT,
+ TotalCharges FLOAT,
+ Churn STRING
+ )
+ ROW FORMAT DELIMITED
+ FIELDS TERMINATED BY ','
+ STORED AS TEXTFILE;
+
+LOAD DATA INPATH '/tmp/input_data/Telecom_customer_churn_data.csv' INTO TABLE telecom_data;
+
+select * from telecom_data limit 10;
+---------------------------------------------------------------------------------------------------
+1)Data Exploration (Beginner)
+a) Write a HiveQL query to find the total number of customers in the dataset.
+
+select count(*) from telecom_data;
+
+b)Write a HiveQL query to find the number of customers who have churned.
+
+select count(*) from telecom_data where churn = 'Yes';
+
+c)Analyze the distribution of customers based on gender and SeniorCitizen status
+
+select gender, seniorcitizen, count(*) from telecom_data group by gender, seniorcitizen;
+
+d)Determine the total charge to the company due to churned customers
+
+select sum(totalcharges) as total_charges from telecom_data where churn = 'Yes';
+-----------------------------------------------------------------------------------------------
+2)Data Analysis (Intermediate)
+a)Write a HiveQL query to find the number of customers who have churned, grouped by their Contract type.
+
+select contract, count(*) as churned 
+from telecom_data 
+where churn = 'Yes'
+group by contract;
+
+b)Write a HiveQL query to find the average MonthlyCharges for customers who have churned vs those who have not.
+
+select churn, avg(MonthlyCharges) as avg_monthlycharges
+from telecom_data 
+group by churn;
+
+c)Determine the maximum, minimum, and average tenure of the customers.
+
+SELECT MAX(tenure), MIN(tenure), AVG(tenure)
+FROM telecom_data;
+
+d)Find out which PaymentMethod is most popular among customers.
+
+SELECT PaymentMethod, COUNT(*)
+ FROM telecom_data
+ GROUP BY PaymentMethod
+ ORDER BY COUNT(*) DESC LIMIT 1;
+
+e) Analyze the relationship between PaperlessBilling and churn rate.
+
+SELECT PaperlessBilling, COUNT(*)
+ FROM telecom_data
+ WHERE Churn = 'Yes'
+ GROUP BY PaperlessBilling;
+------------------------------------------------------------------------------------------------
+3)Partitioning (Intermediate)
+a)Create a partitioned table by Contract and load the data from the original table.
+
+CREATE TABLE telecom_data_partitioned (
+    customerID STRING,
+    gender STRING,
+    SeniorCitizen INT,
+    Partner STRING,
+    Dependents STRING,
+    tenure INT,
+    PhoneService STRING,
+    MultipleLines STRING,
+    InternetService STRING,
+    OnlineSecurity STRING,
+    OnlineBackup STRING,
+    DeviceProtection STRING,
+    TechSupport STRING,
+    StreamingTV STRING,
+    StreamingMovies STRING,
+    PaperlessBilling STRING,
+    PaymentMethod STRING,
+    MonthlyCharges FLOAT,
+    TotalCharges FLOAT,
+    Churn STRING
+)
+PARTITIONED BY (Contract STRING)  -- Partition by Contract column
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+INSERT INTO TABLE telecom_data_partitioned
+PARTITION (Contract)
+SELECT 
+    customerID,
+    gender,
+    SeniorCitizen,
+    Partner,
+    Dependents,
+    tenure,
+    PhoneService,
+    MultipleLines,
+    InternetService,
+    OnlineSecurity,
+    OnlineBackup,
+    DeviceProtection,
+    TechSupport,
+    StreamingTV,
+    StreamingMovies,
+    PaperlessBilling,
+    PaymentMethod,
+    MonthlyCharges,
+    TotalCharges,
+    Churn,
+    Contract
+FROM telecom_data;
+
+b)Write a HiveQL query to find the number of customers who have churned in each Contract type using the partitioned table.
+
+SELECT Contract,COUNT(*) AS num_churned_customers
+FROM telecom_data_partitioned
+WHERE Churn = 'Yes'
+GROUP BY Contract;
+
+c)Find the average MonthlyCharges for each type of Contract using the
+ partitioned table.
+
+SELECT Contract,AVG(MonthlyCharges) AS avg_monthly_charges
+FROM telecom_data_partitioned
+GROUP BY Contract;
+
+d) Determine the maximum tenure in each Contract type partition.
+
+SELECT Contract, MAX(tenure)
+ FROM telecom_data_partitioned
+ GROUP BY Contract;
+---------------------------------------------------------------------------------------------------------------------------
+4)Bucketing (Advanced)
+a)Create a bucketed table by tenure into 6 buckets.
+
+CREATE TABLE telecom_data_bucketed (
+    customerID STRING,
+    gender STRING,
+    SeniorCitizen INT,
+    Partner STRING,
+    Dependents STRING,
+    tenure INT,
+    PhoneService STRING,
+    MultipleLines STRING,
+    InternetService STRING,
+    OnlineSecurity STRING,
+    OnlineBackup STRING,
+    DeviceProtection STRING,
+    TechSupport STRING,
+    StreamingTV STRING,
+    StreamingMovies STRING,
+    Contract STRING,
+    PaperlessBilling STRING,
+    PaymentMethod STRING,
+    MonthlyCharges FLOAT,
+    TotalCharges FLOAT,
+    Churn STRING
+)
+CLUSTERED BY (tenure) INTO 6 BUCKETS
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+INSERT OVERWRITE TABLE telecom_data_bucketed
+SELECT * FROM telecom_data;
+
+b)Write a HiveQL query to find the average MonthlyCharges for customers in each bucket.
+
+SELECT Pmod(hash(tenure), 6) AS bucket_number,AVG(MonthlyCharges) AS avg_monthly_charges
+FROM telecom_data_bucketed
+GROUP BY Pmod(hash(tenure), 6);
+
+SELECT AVG(MonthlyCharges)
+FROM telecom_data_bucketed
+WHERE tenure BETWEEN lower_range AND upper_range;
+
+c)Find the highest TotalCharges in each tenure bucket.
+
+SELECT Pmod(hash(tenure), 6) AS bucket_number,MAX(TotalCharges) AS max_total_charges
+FROM telecom_data_bucketed
+GROUP BY Pmod(hash(tenure), 6);
+
+SELECT 'Bucket 1' AS Bucket, MAX(TotalCharges) as MaxCharge
+ FROM telecom_data_bucketed
+ WHERE tenure BETWEEN 1 AND 10
+ UNION ALL
+ SELECT 'Bucket 2' AS Bucket, MAX(TotalCharges) as MaxCharge
+ FROM telecom_data_bucketed
+ WHERE tenure BETWEEN 11 AND 20
+ UNION ALL
+ SELECT 'Bucket 3' AS Bucket, MAX(TotalCharges) as MaxCharge
+ FROM telecom_data_bucketed
+ WHERE tenure BETWEEN 21 AND 30
+ UNION ALL
+ SELECT 'Bucket 4' AS Bucket, MAX(TotalCharges) as MaxCharge
+ FROM telecom_data_bucketed
+ WHERE tenure BETWEEN 31 AND 40
+ UNION ALL
+ SELECT 'Bucket 5' AS Bucket, MAX(TotalCharges) as MaxCharge
+ FROM telecom_data_bucketed
+ WHERE tenure BETWEEN 41 AND 50
+ UNION ALL
+ SELECT 'Bucket 6' AS Bucket, MAX(TotalCharges) as MaxCharge
+ FROM telecom_data_bucketed
+ WHERE tenure BETWEEN 51 AND 60;
+--------------------------------------------------------------------------------------------------------
+5)Performance Optimization with Joins (Advanced)
+a)
+
+CREATE TABLE demographic_data (
+    customerID STRING,
+    City STRING,
+    Lat FLOAT,
+    Long FLOAT,
+    country STRING,
+    iso2 STRING,
+    State STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+
+LOAD DATA INPATH '/tmp/input_data/CustomerDemographics.csv' INTO TABLE demographic_data;
+
+--Different ty[es of joins--
+
+SELECT t.customerID,t.MonthlyCharges,d.City,d.State
+FROM telecom_data t
+JOIN demographic_data d 
+ON t.customerID = d.customerID;
+
+SELECT t.customerID, t.someColumn, d.age, d.city
+FROM telecom_data t
+JOIN /*+ MAPJOIN(d) */ demographic_data d
+ON t.customerID = d.customerID;
+----------------------------------------------------------------------------------------------------------------
+6)Advanced Analysis (Expert)
+a)Find the distribution of PaymentMethod among churned customers.
+
+SELECT PaymentMethod, COUNT(*)
+ FROM telecom_data
+ WHERE Churn = 'Yes'
+ GROUP BY PaymentMethod;
+
+b)Calculate the churn rate (percentage of customers who left) for each InternetService category
+
+SELECT InternetService, COUNT(*)*100.0/(SELECT COUNT(*) FROM telecom_data WHERE Churn = 'Yes') AS churn_rate
+ FROM telecom_data
+ WHERE Churn = 'Yes'
+ GROUP BY InternetService;
+
+c)Find the number of customers who have no dependents and have churned, grouped by Contract type.
+
+ SELECT Contract, COUNT(*)
+ FROM telecom_data
+ WHERE Churn = 'Yes' AND Dependents = 'No'
+ GROUP BY Contract;
+
+d)Find the top 5 tenure lengths that have the highest churn rates.
+
+SELECT tenure, COUNT(*)*100.0/(SELECT COUNT(*) FROM telecom_data WHERE Churn = 'Yes') AS churn_rate
+ FROM telecom_data
+ WHERE Churn = 'Yes'
+ GROUP BY tenure
+ ORDER BY churn_rate DESC
+ LIMIT 5;
+
+e)Calculate the average MonthlyCharges for customers who have PhoneService and have churned, grouped by Contract type.
+
+ SELECT AVG(MonthlyCharges)
+ FROM telecom_data
+ WHERE PhoneService = 'Yes' AND Churn = 'Yes';
+
+f)Identify which InternetService type is most associated with churned customers.
+
+ SELECT InternetService, COUNT(*)
+ FROM telecom_data
+ WHERE Churn = 'Yes'
+ GROUP BY InternetService
+ ORDER BY COUNT(*) DESC
+ LIMIT 1;
+
+g)Determine if customers with a partner have a lower churn rate compared to those without.
+
+ SELECT Partner, COUNT(*)*100.0/(SELECT COUNT(*) FROM telecom_data WHERE Partner = 'Yes') AS churn_rate_with_partner
+ FROM telecom_data
+ WHERE Churn = 'Yes' AND Partner = 'Yes'
+ group by partner
+ UNION ALL
+ SELECT Partner, COUNT(*)*100.0/(SELECT COUNT(*) FROM telecom_data WHERE Partner = 'No') AS churn_rate_without_partner
+ FROM telecom_data
+ WHERE Churn = 'Yes' AND Partner = 'No'
+ group by partner;
+
+h)Analyze the relationship between MultipleLines and churn rate.
+
+ SELECT MultipleLines, COUNT(*)*100.0/(SELECT COUNT(*) FROM telecom_data WHERE MultipleLines = 'Yes') AS churn_rate_with_multiplelines
+ FROM telecom_data
+ WHERE Churn = 'Yes' AND MultipleLines = 'Yes'
+ group by MultipleLines
+ UNION ALL
+ SELECT MultipleLines, COUNT(*)*100.0/(SELECT COUNT(*) FROM telecom_data WHERE MultipleLines = 'No') AS churn_rate_without_multiplelines
+ FROM telecom_data
+ WHERE Churn = 'Yes' AND MultipleLines = 'No'
+ group by MultipleLines;
